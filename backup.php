@@ -1,6 +1,8 @@
 #!/usr/bin/php
 <?php
 
+  // TODO: sistema de logs
+
   function ln($txt = ''){ echo $txt.PHP_EOL; }
   function cmd($cmd){
     echo ' '.$cmd.PHP_EOL;
@@ -21,21 +23,21 @@
     ln();
     ln('Uso');
     ln();
-    ln(' backup [opciones] fichero_configuración');
+    ln(' backup.php [opciones] fichero_configuración');
     ln();
     ln('Opciones');
     ln();
     ln(' -v                                    muestra información sobre el proceso de copia');
     ln(' -h                                    muestra esta ayuda');
     ln();
-    ln('Fichero de configuración, variables requeridas');
+    ln('Fichero de configuración (JSON), variables requeridas');
     ln();
     ln(' rsync_host      [string]              servicio rsync origen de la copia');
     ln(' rsync_usuario   [string]              usuario del servicio rsync origen de la copia');
     ln(' password_file   [string]              fichero local con la contraseña del servicio rsync');
     ln(' copia_local     [string]              path local base de la copia de seguridad');
     ln();
-    ln('Fichero de configuración, variables opcionales');
+    ln('Fichero de configuración (JSON), variables opcionales');
     ln();
     ln(' inicial         [true|false]          copia inicial, no se hace rotación de copias ( por defecto: false)');
     ln(' copias          [entero]              número de copias a rotar ( por defecto: 10 )');
