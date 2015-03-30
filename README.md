@@ -4,8 +4,10 @@
 	backup.php [opciones] fichero_configuración
 
 ## Opciones
-	-v              muestra información sobre el proceso de copia
-	-h              muestra esta ayuda
+	-d            modo directorio, se ejecuta el proceso sobre cada uno de los ficheros de configuración encontrados en el directorio dado
+	-v            muestra información sobre el proceso de copia
+	-rv           muestra información sobre la salida del proceso rsync (rsync -v)
+	-h            muestra esta ayuda
 
 ## Fichero de configuración (JSON), variables requeridas
 	rsync_host    [string]            servicio rsync origen de la copia

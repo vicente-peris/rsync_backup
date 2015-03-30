@@ -22,7 +22,7 @@
     ln();
     ln('Error: '.$txt);
     ln();
-    return false;
+    exit(1);
   }
 
   function ayuda(){
@@ -36,8 +36,10 @@
     ln();
     ln('Opciones');
     ln();
-    ln(' -v                                    muestra información sobre el proceso de copia');
-    ln(' -h                                    muestra esta ayuda');
+    ln(' -d              modo directorio, se ejecuta el proceso sobre cada uno de los ficheros de configuración encontrados en el directorio dado, implica -v');
+    ln(' -v              muestra información sobre el proceso de copia');
+    ln(' -rv             muestra información sobre la salida del proceso rsync (rsync -v)');
+    ln(' -h              muestra esta ayuda');
     ln();
     ln('Fichero de configuración (JSON), variables requeridas');
     ln();
@@ -55,29 +57,102 @@
     ln();
     ln('MICROVALENCIA Soluciones Informáticas, S.L. - www.microvalencia.es');
     ln();
-    return true;
   }
 
   // obtener las opciones de línea de comando y mostrar la ayuda si es necesario
 
   $opciones = array();
   $fichero_configuracion = '';
-  $opciones_validas = array('h', 'v');
+  $opciones_validas = array('h', 'v', 'rv', 'd');
 
   if(count($argv) > 1){
     for($i=1; $i<count($argv); $i++){
       if(substr($argv[$i], 0, 1) == '-') $opciones[] = substr($argv[$i], 1);
       elseif($i == count($argv) - 1) $fichero_configuracion = $argv[$i];
-      else return ayuda();
+      else {
+        ayuda();
+        exit(1);
+      }
     }  
   }
     
   foreach($opciones as $opcion){
-    if(!in_array($opcion, $opciones_validas)) return ayuda();
+    if(!in_array($opcion, $opciones_validas)){
+      ayuda();
+      exit(1);
+    }
   }
-  if(in_array('h', $opciones) || $fichero_configuracion == '') return ayuda();
-  
-  $GLOBALS['verbose'] = in_array('v', $opciones);
+
+  if($fichero_configuracion == ''){
+    ayuda();
+    exit(1);
+  }
+
+  if(in_array('h', $opciones)){
+    // mostrar ayuda
+    ayuda();
+    exit(0);
+  } 
+
+  $GLOBALS['verbose'] = in_array('v', $opciones) || in_array('d', $opciones);
+  $configuracion_basica = array('rsync_host', 'rsync_usuario', 'password_file', 'copia_local');
+
+  if(in_array('d', $opciones)){
+    // modo directorio
+    
+    ln();
+    ln('iniciando modo directorio...');
+
+    $logs = '/var/log/backups/';
+    // TODO: buscar /etc/backup.conf y obtener de el el fichero de backups, por defecto /var/log/backups
+
+    if(file_exists($logs) && is_writable($logs)){
+      $GLOBALS['log'] = $logs.date('Ymd_Gi', $t_inicio).'.log';
+      if(file_exists($GLOBALS['log'])){
+        $i_log = 0;
+        do {
+          $i_log++;
+          $GLOBALS['log'] = $logs.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
+        } while(file_exists($GLOBALS['log']));
+      }
+      file_put_contents($GLOBALS['log'], $GLOBALS['prelog']);
+      unset($GLOBALS['prelog']);
+      ln('usando fichero de log '.$GLOBALS['log']);
+      ln();
+    } else {
+      ln('el directorio de logs ('.$logs.') no existe o no tiene permisos de escritura, continuando sin registro de logs');
+      ln();
+    }
+
+    if(!file_exists($fichero_configuracion) || !is_dir($fichero_configuracion)){
+      return error('No se puede encontrar el directorio con los ficheros de configuración');
+    }
+
+    if(substr($fichero_configuracion, -1) != '/') $fichero_configuracion .= '/';
+    $path = $fichero_configuracion;
+
+    if($dir = opendir($path)){
+      while(($f = readdir($dir)) !== false){
+        if(is_file($path.$f)){
+          ln('copiando '.$path.$f.' ...');
+          $cfg = json_decode(file_get_contents($path.$f));
+          if(!is_object($cfg)) ln('No parece un fichero de configuración, ignorando');
+          else {
+            $ok = true;
+            foreach($configuracion_basica as $o) if(!isset($cfg->$o)) $ok = false;
+            if(!$ok) ln('El fichero no tiene la configuración básica, ignorando');
+            else {
+              cmd(__FILE__.((in_array('v', $opciones))?' -v':'').((in_array('rv', $opciones))?' -rv':'').' '.$path.$f);
+            }
+          }
+        }
+      }
+      closedir($dir);
+    }
+
+    ln();
+    exit(0);
+  }
 
   // comprobar si el fichero de configuración existe
 
@@ -96,15 +171,15 @@
   
   // comprobar si existe la configuración básica y si es válida
 
-  $configuracion_basica = array('rsync_host', 'rsync_usuario', 'password_file', 'copia_local');
   foreach($configuracion_basica as $o) if(!isset($cfg->$o)) return error('Configuración insuficiente');
 
   if(!file_exists($cfg->password_file)) return error('El fichero local con la contraseña del servicio rsync no existe ('.$cfg->password_file.')');
-  // TODO: comprobar permisos del fichero de password
+  if(decoct(fileperms($cfg->password_file) & 0777) != '600') return error('El fichero local con la contraseña debe tener los siguientes permisos: -rw------- (600)');
+  if(posix_geteuid() != fileowner($cfg->password_file)) return error('La copia debe ejecutarse desde el propietario del fichero local de la contraseña');
   
   if(substr($cfg->copia_local, -1) == '/') $cfg->copia_local = substr($cfg->copia_local, 0, -1);
   if(!file_exists($cfg->copia_local) || !is_dir($cfg->copia_local) || substr($cfg->copia_local, 0, 1) != '/') return error('El directorio de copia local no existe o no es válido ('.$cfg->copia_local.')');
-  // TODO: comprobar permisos de escritura del directorio de copia local
+  if(!is_writable($cfg->copia_local)) return error('El directorio de copia local no tiene permisos de escritura');
 
   // comprobar valores por defecto de la configuración opcional
   
@@ -207,7 +282,7 @@
 
   ln('copiando...');
   if(!file_exists($cfg->copia_local.'/backup.0')) cmd('mkdir '.$cfg->copia_local.'/backup.0');
-  cmd('rsync -av --delete --password-file='.$cfg->password_file.' rsync://'.$cfg->rsync_usuario.'@'.$cfg->rsync_host.'/* '.$cfg->copia_local.'/backup.0/');
+  cmd('rsync -a'.((in_array('rv', $opciones))?'v':'').' --delete --password-file='.$cfg->password_file.' rsync://'.$cfg->rsync_usuario.'@'.$cfg->rsync_host.'/* '.$cfg->copia_local.'/backup.0/');
   ln();
 
   if($cfg->fix_permisos != ''){
@@ -224,3 +299,5 @@
   ln('marca de tiempo final '.date('Ymd_Gi', $t_fin));
   ln('duración del proceso '.$duracion.'s');
   ln();
+
+  exit(0);

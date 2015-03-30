@@ -1,5 +1,5 @@
 {
-	"rsync_host":    "host.es/recurso",
+	"rsync_host":    "host/recurso",
 	"rsync_usuario": "backup",
 	"password_file": "/etc/rsyncd.secrets",
 	"copia_local":   "/var/www/backup/test/",
