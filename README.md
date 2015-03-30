@@ -42,7 +42,7 @@ Además se puede indicar credenciales de API Mandrill [https://mandrillapp.com](
 
 ## Fichero de configuración global de ejemplo (valores por defecto)
 	{
-		"logs"             : "/var/log/backups",
+	  "logs"             : "/var/log/backups",
 	  "caducidad_logs"   : 10,
 	  "mandrill_api"     : "",
 	  "mandrill_destino" : ""
