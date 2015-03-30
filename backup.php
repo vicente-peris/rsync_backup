@@ -11,20 +11,6 @@
     else $GLOBALS['prelog'] .= $out;
   }
 
-  function cmd($cmd){
-    ln(' '.$cmd);
-    $log = array();
-    exec($cmd.' 2>&1', $log);
-    foreach($log as $l) ln('    '.$l);
-  }
-
-  function error($txt){
-    ln();
-    ln('Error: '.$txt);
-    ln();
-    exit(1);
-  }
-
   function ayuda(){
     ln();
     ln('Script de backup incremental rsync');
@@ -59,6 +45,58 @@
     ln();
   }
 
+  function cmd($cmd){
+    ln(' '.$cmd);
+    $log = array();
+    exec($cmd.' 2>&1', $log);
+    // TODO: comprobar si el $cmd comienza por rsync y buscar errores en la salida, en tal caso emitir una alerta via email (mandrill)
+    foreach($log as $l) ln('    '.$l);
+  }
+
+  function error($txt){
+    ln();
+    ln('Error: '.$txt);
+    ln();
+    alerta($txt);
+    exit(1);
+  }
+
+  function alerta($txt){
+    if(isset($GLOBALS['mandrill_api']) && isset($GLOBALS['mandrill_destino'])){
+      $alerta  = '<strong>'.$txt.'</strong><br/>';
+      $alerta .= 'cmd: '.implode(' ', $argv);
+      mandrill('Alerta backup rsync', $alerta);
+    }
+  }
+
+  function mandrill($asunto, $html, $txt = '', $tags = array()){
+
+    $post = array();
+    $post['key'] = $GLOBALS['mandrill_api'];
+    $post['message'] = array();
+    if($html != '') $post['message']['html'] = $html;
+    if($txt != '') $post['message']['txt'] = $txt;
+    else $post['message']['auto_text'] = true;
+    $post['message']['subject'] = $asunto;
+    $post['message']['from_email'] = $GLOBALS['mandrill_destino'];
+    $post['message']['from_name'] = "Script backup rsync";
+    $post['message']['to'] = array();
+    $post['message']['to'][] = array('email' => $GLOBALS['mandrill_destino']);
+    $post['message']['track_opens'] = false;
+    $post['message']['track_clicks'] = false;
+    if(is_array($tags) && count($tags) > 0) $post['message']['tags'] = $tags;
+    
+    $ch = curl_init(); 
+    curl_setopt($ch, CURLOPT_URL, 'https://mandrillapp.com/api/1.0/messages/send.json'); 
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); 
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE); 
+    curl_setopt($ch, CURLOPT_POST, TRUE); 
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($post));   
+    $data = curl_exec($ch); 
+    curl_close($ch);
+
+  }
+
   // obtener las opciones de línea de comando y mostrar la ayuda si es necesario
 
   $opciones = array();
@@ -71,7 +109,7 @@
       elseif($i == count($argv) - 1) $fichero_configuracion = $argv[$i];
       else {
         ayuda();
-        exit(1);
+        error('Sintáxis incorrecta');
       }
     }  
   }
@@ -79,13 +117,13 @@
   foreach($opciones as $opcion){
     if(!in_array($opcion, $opciones_validas)){
       ayuda();
-      exit(1);
+      error('Opciones no reconocidas');
     }
   }
 
   if($fichero_configuracion == ''){
     ayuda();
-    exit(1);
+    error('Falta fichero de configuracion');
   }
 
   if(in_array('h', $opciones)){
@@ -97,22 +135,34 @@
   $GLOBALS['verbose'] = in_array('v', $opciones) || in_array('d', $opciones);
   $configuracion_basica = array('rsync_host', 'rsync_usuario', 'password_file', 'copia_local');
 
+  // obteniendo configuración global y estableciendo valores por defecto
+  
+  $f_config = '/etc/backup.conf';
+  if(file_exists($f_config) && is_readable($f_config)){
+    $cfg_global = json_decode(file_get_contents($f_config));
+    if(!is_object($cfg_global)) $cfg_global = new stdClass();
+  }
+
+  if(!isset($cfg_global->logs)) $cfg_global->logs = '/var/log/backups/';
+  if(substr($cfg_global->logs, -1) != '/') $cfg_global->logs .= '/';
+  if(!isset($cfg_global->caducidad_logs)) $cfg_global->caducidad_logs = 10;
+
+  if(isset($cfg_global->mandrill_api)) $GLOBALS['mandrill_api'] = $cfg_global->mandrill_api;
+  if(isset($cfg_global->mandrill_destino)) $GLOBALS['mandrill_destino'] = $cfg_global->mandrill_destino;
+
   if(in_array('d', $opciones)){
     // modo directorio
     
     ln();
     ln('iniciando modo directorio...');
 
-    $logs = '/var/log/backups/';
-    // TODO: buscar /etc/backup.conf y obtener de el el fichero de backups, por defecto /var/log/backups
-
-    if(file_exists($logs) && is_writable($logs)){
-      $GLOBALS['log'] = $logs.date('Ymd_Gi', $t_inicio).'.log';
+    if(file_exists($cfg_global->logs) && is_writable($cfg_global->logs)){
+      $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Gi', $t_inicio).'.log';
       if(file_exists($GLOBALS['log'])){
         $i_log = 0;
         do {
           $i_log++;
-          $GLOBALS['log'] = $logs.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
+          $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
         } while(file_exists($GLOBALS['log']));
       }
       file_put_contents($GLOBALS['log'], $GLOBALS['prelog']);
@@ -120,7 +170,7 @@
       ln('usando fichero de log '.$GLOBALS['log']);
       ln();
     } else {
-      ln('el directorio de logs ('.$logs.') no existe o no tiene permisos de escritura, continuando sin registro de logs');
+      ln('el directorio de logs ('.$cfg_global->logs.') no existe o no tiene permisos de escritura, continuando sin registro de logs');
       ln();
     }
 
@@ -150,8 +200,12 @@
       closedir($dir);
     }
 
+    ln('eliminando logs antiguos');
+    cmd('find '.$cfg_global->logs.' -type f -name *.log -mtime +'.$cfg_global->caducidad_logs.' -exec rm {} \\;');
+
     ln();
-    exit(0);
+
+    exit(0); // fin modo directorio
   }
 
   // comprobar si el fichero de configuración existe
@@ -164,7 +218,7 @@
   }
 
   ln();
-  ln('Usando configuración: '.$fichero_configuracion);
+  ln('usando configuración '.$fichero_configuracion);
 
   $cfg = json_decode(file_get_contents($fichero_configuracion));
   if(!is_object($cfg)) return error('Fichero de configuración no válido');
@@ -269,7 +323,7 @@
 
       if(file_exists($cfg->copia_local.'/fix')){
         ln('corrigiendo errores de rotación...');
-        ln('deberias comprobar los permisos de los ficheros copiados');
+        ln('deberias comprobar los permisos de los ficheros copiados', 'error');
         cmd('rm -rf '.$cfg->copia_local.'/fix');
         ln();
       }
@@ -291,6 +345,12 @@
     cmd('chmod -R g-s '.$cfg->copia_local.'/backup.0/');
     cmd('find '.$cfg->copia_local.'/backup.0/ -type d -exec chmod 775 {} \;');
     cmd('find '.$cfg->copia_local.'/backup.0/ -type f -exec chmod 664 {} \;');
+    ln();
+  }
+
+  if(isset($GLOBALS['log'])){
+    ln('eliminando logs antiguos');
+    cmd('find '.dirname($GLOBALS['log']).' -type f -name *.log -mtime +'.$cfg_global->caducidad_logs.' -exec rm {} \\;');
     ln();
   }
   
