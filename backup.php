@@ -1,6 +1,8 @@
 #!/usr/bin/php
 <?php
 
+  // TODO: opcion check config
+
   $t_inicio = time();
   $GLOBALS['prelog'] = '';
 
