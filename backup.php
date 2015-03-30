@@ -1,12 +1,21 @@
 #!/usr/bin/php
 <?php
 
-  // TODO: sistema de logs
+  $t_inicio = time();
+  $GLOBALS['prelog'] = '';
 
-  function ln($txt = ''){ echo $txt.PHP_EOL; }
+  function ln($txt = ''){ 
+    $out = $txt.PHP_EOL; 
+    if(isset($GLOBALS['verbose']) && $GLOBALS['verbose']) echo $out;
+    if(isset($GLOBALS['log'])) file_put_contents($GLOBALS['log'], $out, FILE_APPEND);
+    else $GLOBALS['prelog'] .= $out;
+  }
+
   function cmd($cmd){
-    echo ' '.$cmd.PHP_EOL;
-    // TODO: ejecutar $cmd
+    ln(' '.$cmd);
+    $log = array();
+    exec($cmd.' 2>&1', $log);
+    foreach($log as $l) ln('    '.$l);
   }
 
   function error($txt){
@@ -68,7 +77,7 @@
   }
   if(in_array('h', $opciones) || $fichero_configuracion == '') return ayuda();
   
-  $verbose = in_array('v', $opciones);
+  $GLOBALS['verbose'] = in_array('v', $opciones);
 
   // comprobar si el fichero de configuración existe
 
@@ -79,10 +88,8 @@
     }
   }
 
-  if($verbose){
-    ln();
-    ln('Usando configuración: '.$fichero_configuracion);
-  }
+  ln();
+  ln('Usando configuración: '.$fichero_configuracion);
 
   $cfg = json_decode(file_get_contents($fichero_configuracion));
   if(!is_object($cfg)) return error('Fichero de configuración no válido');
@@ -118,75 +125,102 @@
     }
   }
 
-  $t_inicio = time();
-  $t = date('Ymd_Gi', $t_inicio);
+  ln('  rsync_host      : '.$cfg->rsync_host);
+  ln('  rsync_usuario   : '.$cfg->rsync_usuario);
+  ln('  copia_local     : '.$cfg->copia_local);
+  ln('  copias          : '.$cfg->copias);
+  ln('  inicial         : '.(($cfg->inicial)?'true':'false'));
+  ln('  fix_rotacion    : '.(($cfg->fix_rotacion)?'true':'false'));
+  ln('  fix_permisos    : '.$cfg->fix_permisos);
+  ln();
+  ln('marca de tiempo inicial '.date('Ymd_Gi', $t_inicio));
 
-  if($verbose){
-    ln('  rsync_host      : '.$cfg->rsync_host);
-    ln('  rsync_usuario   : '.$cfg->rsync_usuario);
-    ln('  copia_local     : '.$cfg->copia_local);
-    ln('  copias          : '.$cfg->copias);
-    ln('  inicial         : '.(($cfg->inicial)?'true':'false'));
-    ln('  fix_rotacion    : '.(($cfg->fix_rotacion)?'true':'false'));
-    ln('  fix_permisos    : '.$cfg->fix_permisos);
-    ln();
-    ln('marca de tiempo inicial '.$t);
-    ln();
+  // iniciamos el log y guardamos el prelog
+  
+  if(!file_exists($cfg->copia_local.'/logs')) mkdir($cfg->copia_local.'/logs');
+  $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Gi', $t_inicio).'.log';
+  if(file_exists($GLOBALS['log'])){
+    $i_log = 0;
+    do {
+      $i_log++;
+      $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
+    } while(file_exists($GLOBALS['log']));
   }
+  file_put_contents($GLOBALS['log'], $GLOBALS['prelog']);
+  unset($GLOBALS['prelog']);
+  ln('usando fichero de log '.$GLOBALS['log']);
+  ln();
+
+  // comienza la fiesta :)
 
   if(!$cfg->inicial){
-    if($verbose) ln('rotando copias...');
+    ln('rotando copias...');
+    $cmd_rotacion = false;
 
     // eliminamos la última copia
     if(file_exists($cfg->copia_local.'/backup.'.($cfg->copias - 1))){
       cmd('rm -rf '.$cfg->copia_local.'/backup.'.($cfg->copias - 1));
+      $cmd_rotacion = true;
     }
 
     // rotando copias recursivas
     for($i = $cfg->copias - 2; $i>=1; $i--){
       if(file_exists($cfg->copia_local.'/backup.'.$i)){
         cmd('mv '.$cfg->copia_local.'/backup.'.$i.' '.$cfg->copia_local.'/backup.'.($i + 1));
+        $cmd_rotacion = true;
       }
     }
 
     // duplicando la copia inicial
     if(file_exists($cfg->copia_local.'/backup.0')){
       cmd('cp -al '.$cfg->copia_local.'/backup.0 '.$cfg->copia_local.'/backup.1');
+      $cmd_rotacion = true;
     }
+
+    if($cmd_rotacion) ln();
     
     if($cfg->fix_rotacion){
-      if($verbose) ln('corrigiendo rotación...');
+
+      ln('corrigiendo rotación...');
+      $cmd_rotacion = false;
       for($i=1; $i<=$cfg->copias; $i++){
         if(file_exists($cfg->copia_local.'/backup.'.$i.'/backup.'.($i - 1))){
           if(!file_exists($cfg->copia_local.'/fix')) cmd('mkdir '.$cfg->copia_local.'/fix');
           cmd('mv '.$cfg->copia_local.'/backup.'.$i.'/backup.'.($i - 1).' '.$cfg->copia_local.'/fix');
+          $cmd_rotacion = true;
         }
       }
+      if($cmd_rotacion) ln();
+
       if(file_exists($cfg->copia_local.'/fix')){
+        ln('corrigiendo errores de rotación...');
+        ln('deberias comprobar los permisos de los ficheros copiados');
         cmd('rm -rf '.$cfg->copia_local.'/fix');
-        // TODO: enviar alerta de fix_rotacion
+        ln();
       }
+
     }
+
+    if($cmd_rotacion) ln();
 
   }
 
-  if($verbose) ln('copiando...');
+  ln('copiando...');
   if(!file_exists($cfg->copia_local.'/backup.0')) cmd('mkdir '.$cfg->copia_local.'/backup.0');
-  cmd('rsync -av --delete --password-file='.$cfg->password_file.' rsync://'.$cfg->rsync_host.'@'.$cfg->rsync_usuario.'/* '.$cfg->copia_local.'/backup.0/');
+  cmd('rsync -av --delete --password-file='.$cfg->password_file.' rsync://'.$cfg->rsync_usuario.'@'.$cfg->rsync_host.'/* '.$cfg->copia_local.'/backup.0/');
+  ln();
 
   if($cfg->fix_permisos != ''){
-    if($verbose) ln('corrigiendo permisos...');
+    ln('corrigiendo permisos...');
     cmd('chown -R '.$cfg->fix_permisos.' '.$cfg->copia_local.'/backup.0/');
     cmd('chmod -R g-s '.$cfg->copia_local.'/backup.0/');
     cmd('find '.$cfg->copia_local.'/backup.0/ -type d -exec chmod 775 {} \;');
     cmd('find '.$cfg->copia_local.'/backup.0/ -type f -exec chmod 664 {} \;');
+    ln();
   }
   
   $t_fin = time();
   $duracion = $t_fin - $t_inicio;
-  if($verbose){
-    ln();
-    ln('marca de tiempo final '.$t);
-    ln('duración del proceso '.$duracion.'s');
-    ln();
-  }
+  ln('marca de tiempo final '.date('Ymd_Gi', $t_fin));
+  ln('duración del proceso '.$duracion.'s');
+  ln();
