@@ -1,10 +1,9 @@
 #!/usr/bin/php
 <?php
 
-  // TODO: opcion check config
-
   $t_inicio = time();
   $GLOBALS['prelog'] = '';
+  $GLOBALS['argv'] = $argv;
 
   function ln($txt = ''){ 
     $out = $txt.PHP_EOL; 
@@ -27,6 +26,7 @@
     ln(' -d              modo directorio, se ejecuta el proceso sobre cada uno de los ficheros de configuración encontrados en el directorio dado, implica -v');
     ln(' -v              muestra información sobre el proceso de copia');
     ln(' -rv             muestra información sobre la salida del proceso rsync (rsync -v)');
+    ln(' -test           comprueba la configuración sin realizar ninguna copia, implica -v');
     ln(' -h              muestra esta ayuda');
     ln();
     ln('Fichero de configuración (JSON), variables requeridas');
@@ -51,8 +51,15 @@
     ln(' '.$cmd);
     $log = array();
     exec($cmd.' 2>&1', $log);
-    // TODO: comprobar si el $cmd comienza por rsync y buscar errores en la salida, en tal caso emitir una alerta via email (mandrill)
     foreach($log as $l) ln('    '.$l);
+    if(strpos($cmd, 'rsync ') === 0){
+      foreach($log as $l){
+        if(strpos($l, 'rsync error:') === 0){
+          alerta($l);
+          break;
+        }
+      }
+    }
   }
 
   function error($txt){
@@ -65,8 +72,11 @@
 
   function alerta($txt){
     if(isset($GLOBALS['mandrill_api']) && isset($GLOBALS['mandrill_destino'])){
+      ln();
+      ln('enviando alerta: '.$txt);
+      ln();
       $alerta  = '<strong>'.$txt.'</strong><br/>';
-      $alerta .= 'cmd: '.implode(' ', $argv);
+      $alerta .= 'cmd: '.implode(' ', $GLOBALS['argv']);
       mandrill('Alerta backup rsync', $alerta);
     }
   }
@@ -103,7 +113,7 @@
 
   $opciones = array();
   $fichero_configuracion = '';
-  $opciones_validas = array('h', 'v', 'rv', 'd');
+  $opciones_validas = array('h', 'v', 'rv', 'd', 'test');
 
   if(count($argv) > 1){
     for($i=1; $i<count($argv); $i++){
@@ -134,7 +144,7 @@
     exit(0);
   } 
 
-  $GLOBALS['verbose'] = in_array('v', $opciones) || in_array('d', $opciones);
+  $GLOBALS['verbose'] = in_array('v', $opciones) || in_array('d', $opciones) || in_array('test', $opciones);
   $configuracion_basica = array('rsync_host', 'rsync_usuario', 'password_file', 'copia_local');
 
   // obteniendo configuración global y estableciendo valores por defecto
@@ -143,7 +153,7 @@
   if(file_exists($f_config) && is_readable($f_config)){
     $cfg_global = json_decode(file_get_contents($f_config));
     if(!is_object($cfg_global)) $cfg_global = new stdClass();
-  }
+  } else $cfg_global = new stdClass();
 
   if(!isset($cfg_global->logs)) $cfg_global->logs = '/var/log/backups/';
   if(substr($cfg_global->logs, -1) != '/') $cfg_global->logs .= '/';
@@ -177,7 +187,7 @@
     }
 
     if(!file_exists($fichero_configuracion) || !is_dir($fichero_configuracion)){
-      return error('No se puede encontrar el directorio con los ficheros de configuración');
+      error('No se puede encontrar el directorio con los ficheros de configuración');
     }
 
     if(substr($fichero_configuracion, -1) != '/') $fichero_configuracion .= '/';
@@ -215,7 +225,7 @@
   if(!file_exists($fichero_configuracion)){
     $fichero_configuracion = '/etc/backups/'.$fichero_configuracion;
     if(!file_exists($fichero_configuracion)){
-      return error('No puedo encontrar el fichero de configuración');
+      error('No puedo encontrar el fichero de configuración');
     }
   }
 
@@ -223,36 +233,36 @@
   ln('usando configuración '.$fichero_configuracion);
 
   $cfg = json_decode(file_get_contents($fichero_configuracion));
-  if(!is_object($cfg)) return error('Fichero de configuración no válido');
+  if(!is_object($cfg)) error('Fichero de configuración no válido');
   
   // comprobar si existe la configuración básica y si es válida
 
-  foreach($configuracion_basica as $o) if(!isset($cfg->$o)) return error('Configuración insuficiente');
+  foreach($configuracion_basica as $o) if(!isset($cfg->$o)) error('Configuración insuficiente');
 
-  if(!file_exists($cfg->password_file)) return error('El fichero local con la contraseña del servicio rsync no existe ('.$cfg->password_file.')');
-  if(decoct(fileperms($cfg->password_file) & 0777) != '600') return error('El fichero local con la contraseña debe tener los siguientes permisos: -rw------- (600)');
-  if(posix_geteuid() != fileowner($cfg->password_file)) return error('La copia debe ejecutarse desde el propietario del fichero local de la contraseña');
+  if(!file_exists($cfg->password_file)) error('El fichero local con la contraseña del servicio rsync no existe ('.$cfg->password_file.')');
+  if(decoct(fileperms($cfg->password_file) & 0777) != '600') error('El fichero local con la contraseña debe tener los siguientes permisos: -rw------- (600)');
+  if(posix_geteuid() != fileowner($cfg->password_file)) error('La copia debe ejecutarse desde el propietario del fichero local de la contraseña');
   
   if(substr($cfg->copia_local, -1) == '/') $cfg->copia_local = substr($cfg->copia_local, 0, -1);
-  if(!file_exists($cfg->copia_local) || !is_dir($cfg->copia_local) || substr($cfg->copia_local, 0, 1) != '/') return error('El directorio de copia local no existe o no es válido ('.$cfg->copia_local.')');
-  if(!is_writable($cfg->copia_local)) return error('El directorio de copia local no tiene permisos de escritura');
+  if(!file_exists($cfg->copia_local) || !is_dir($cfg->copia_local) || substr($cfg->copia_local, 0, 1) != '/') error('El directorio de copia local no existe o no es válido ('.$cfg->copia_local.')');
+  if(!is_writable($cfg->copia_local)) error('El directorio de copia local no tiene permisos de escritura');
 
   // comprobar valores por defecto de la configuración opcional
   
   if(!isset($cfg->inicial)) $cfg->inicial = false;
-  elseif(!is_bool($cfg->inicial)) return error('El valor de configuración copia inicial no es válido');
+  elseif(!is_bool($cfg->inicial)) error('El valor de configuración copia inicial no es válido');
 
   if(!isset($cfg->copias)) $cfg->copias = 10;
-  elseif(!is_int($cfg->copias)) return error('El valor de configuración de número de copias no es válido');
+  elseif(!is_int($cfg->copias)) error('El valor de configuración de número de copias no es válido');
 
   if(!isset($cfg->fix_rotacion)) $cfg->fix_rotacion = true;
-  elseif(!is_bool($cfg->fix_rotacion)) return error('El valor de configuración de corrección de problemas rotación no es válido');
+  elseif(!is_bool($cfg->fix_rotacion)) error('El valor de configuración de corrección de problemas rotación no es válido');
 
-  if(!isset($cfg->fix_permisos)) $cfg->fix_permisos = "";
-  else {
+  if(!isset($cfg->fix_permisos)) $cfg->fix_permisos = '';
+  elseif($cfg->fix_permisos != ''){
     $permisos = explode(':', $cfg->fix_permisos);
     if(count($permisos) != 2 || trim($permisos[0]) == '' || trim($permisos[1]) == ''){
-      return error('El valor de configuración de corrección de permisos no es válido');
+      error('El valor de configuración de corrección de permisos no es válido');
     }
   }
 
@@ -264,6 +274,13 @@
   ln('  fix_rotacion    : '.(($cfg->fix_rotacion)?'true':'false'));
   ln('  fix_permisos    : '.$cfg->fix_permisos);
   ln();
+
+  if(in_array('test', $opciones)){
+    ln('configuración correcta ¡listo para hacer copias!');
+    ln();
+    exit(0);
+  }
+
   ln('marca de tiempo inicial '.date('Ymd_Gi', $t_inicio));
 
   // iniciamos el log y guardamos el prelog

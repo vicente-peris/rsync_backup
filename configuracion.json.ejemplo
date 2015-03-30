@@ -1,0 +1,10 @@
+{
+  "rsync_host"    : "host/recurso",
+  "rsync_usuario" : "backup",
+  "password_file" : "/etc/rsyncd.secrets",
+  "copia_local"   : "/var/www/backup/test/",
+  "inicial"       : false,
+  "copias"        : 10,
+  "fix_rotacion"  : true,
+  "fix_permisos"  : "vicente:microvalencia"
+}
