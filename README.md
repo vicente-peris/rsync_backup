@@ -1,4 +1,5 @@
 # Script de backup incremental rsync
+![estado: pre-alpha](https://img.shields.io/badge/estado-pre--alpha-yellow.svg)
 
 ## Uso
 	backup.php [opciones] fichero_configuración
