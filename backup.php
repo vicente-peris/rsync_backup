@@ -204,7 +204,7 @@
             foreach($configuracion_basica as $o) if(!isset($cfg->$o)) $ok = false;
             if(!$ok) ln('El fichero no tiene la configuración básica, ignorando');
             else {
-              cmd(__FILE__.((in_array('v', $opciones))?' -v':'').((in_array('rv', $opciones))?' -rv':'').' '.$path.$f);
+              cmd(__FILE__.((in_array('v', $opciones))?' -v':'').((in_array('rv', $opciones))?' -rv':'').((in_array('test', $opciones))?' -test':'').' '.$path.$f);
             }
           }
         }
@@ -212,8 +212,10 @@
       closedir($dir);
     }
 
-    ln('eliminando logs antiguos');
-    cmd('find '.$cfg_global->logs.' -type f -name *.log -mtime +'.$cfg_global->caducidad_logs.' -exec rm {} \\;');
+    if(!in_array('test', $opciones)){
+      ln('eliminando logs antiguos');
+      cmd('find '.$cfg_global->logs.' -type f -name *.log -mtime +'.$cfg_global->caducidad_logs.' -exec rm {} \\;');
+    }
 
     ln();
 
