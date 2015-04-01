@@ -4,7 +4,6 @@
   $t_inicio = time();
   $GLOBALS['prelog'] = '';
   $GLOBALS['argv'] = $argv;
-  $GLOBALS['verbose'] = true;
 
   function ln($txt = ''){ 
     $out = $txt.PHP_EOL; 
@@ -14,6 +13,7 @@
   }
 
   function ayuda(){
+    $GLOBALS['verbose'] = true;
     ln();
     ln('Script de backup incremental rsync');
     ln('===================================');    
@@ -64,6 +64,7 @@
   }
 
   function error($txt){
+    $GLOBALS['verbose'] = true;
     ln();
     ln('Error: '.$txt);
     ln();
@@ -134,16 +135,16 @@
     }
   }
 
-  if($fichero_configuracion == ''){
-    ayuda();
-    error('Falta fichero de configuracion');
-  }
-
   if(in_array('h', $opciones)){
     // mostrar ayuda
     ayuda();
     exit(0);
-  } 
+  }
+
+  if($fichero_configuracion == ''){
+    ayuda();
+    error('Falta fichero de configuracion');
+  }
 
   $GLOBALS['verbose'] = in_array('v', $opciones) || in_array('d', $opciones) || in_array('test', $opciones);
   $configuracion_basica = array('rsync_host', 'rsync_usuario', 'password_file', 'copia_local');
