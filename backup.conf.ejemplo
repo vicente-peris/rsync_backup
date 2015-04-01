@@ -2,5 +2,6 @@
   "logs"             : "/var/log/backups",
   "caducidad_logs"   : 10,
   "mandrill_api"     : "",
+  "mandrill_origen"  : "",
   "mandrill_destino" : ""
 }

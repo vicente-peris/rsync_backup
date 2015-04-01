@@ -25,27 +25,28 @@
 
 ## Fichero de configuración de ejemplo
 	{
-		"rsync_host"    : "host/servicio",
-		"rsync_usuario" : "backup",
-		"password_file" : "/etc/rsyncd.secrets",
-		"copia_local"   : "/var/backups/host.servicio/",
-		"inicial"       : false,
-		"copias"        : 10,
-		"fix_rotacion"  : true,
-		"fix_permisos"  : "microvalencia:microvalencia"
+	  "rsync_host"    : "host/servicio",
+	  "rsync_usuario" : "backup",
+	  "password_file" : "/etc/rsyncd.secrets",
+	  "copia_local"   : "/var/backups/host.servicio/",
+	  "inicial"       : false,
+	  "copias"        : 10,
+	  "fix_rotacion"  : true,
+	  "fix_permisos"  : "microvalencia:microvalencia"
 	}
 
 ## Configuración global
 
 Configuración global opcional, indicando la ruta de logs para el modo directorio y la caducidad de los logs, tanto globales como locales.
 
-Además se puede indicar credenciales de API Mandrill [https://mandrillapp.com](https://mandrillapp.com) y el remitente de alertas enviadas por correo. Se enviarán los errores de configuración y del proceso rsync principal en tiempo de ejecución
+Además se puede indicar credenciales de API Mandrill [https://mandrillapp.com](https://mandrillapp.com) y el emisor y destinatario de alertas enviadas por correo electrónico. Se enviarán los errores de configuración y del proceso rsync principal en tiempo de ejecución.
 
 ## Fichero de configuración global de ejemplo (valores por defecto)
 	{
 	  "logs"             : "/var/log/backups",
 	  "caducidad_logs"   : 10,
 	  "mandrill_api"     : "",
+	  "mandrill_origen"  : "",
 	  "mandrill_destino" : ""
 	}
 

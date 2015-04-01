@@ -4,6 +4,7 @@
   $t_inicio = time();
   $GLOBALS['prelog'] = '';
   $GLOBALS['argv'] = $argv;
+  $GLOBALS['verbose'] = true;
 
   function ln($txt = ''){ 
     $out = $txt.PHP_EOL; 
@@ -71,7 +72,7 @@
   }
 
   function alerta($txt){
-    if(isset($GLOBALS['mandrill_api']) && isset($GLOBALS['mandrill_destino'])){
+    if(isset($GLOBALS['mandrill_api']) && isset($GLOBALS['mandrill_origen']) && isset($GLOBALS['mandrill_destino'])){
       ln();
       ln('enviando alerta: '.$txt);
       ln();
@@ -90,7 +91,7 @@
     if($txt != '') $post['message']['txt'] = $txt;
     else $post['message']['auto_text'] = true;
     $post['message']['subject'] = $asunto;
-    $post['message']['from_email'] = $GLOBALS['mandrill_destino'];
+    $post['message']['from_email'] = $GLOBALS['mandrill_origen'];
     $post['message']['from_name'] = "Script backup rsync";
     $post['message']['to'] = array();
     $post['message']['to'][] = array('email' => $GLOBALS['mandrill_destino']);
@@ -160,6 +161,7 @@
   if(!isset($cfg_global->caducidad_logs)) $cfg_global->caducidad_logs = 10;
 
   if(isset($cfg_global->mandrill_api)) $GLOBALS['mandrill_api'] = $cfg_global->mandrill_api;
+  if(isset($cfg_global->mandrill_origen)) $GLOBALS['mandrill_origen'] = $cfg_global->mandrill_origen;
   if(isset($cfg_global->mandrill_destino)) $GLOBALS['mandrill_destino'] = $cfg_global->mandrill_destino;
 
   if(in_array('d', $opciones)){
