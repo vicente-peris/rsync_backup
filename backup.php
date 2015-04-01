@@ -172,12 +172,12 @@
     ln('iniciando modo directorio...');
 
     if(file_exists($cfg_global->logs) && is_writable($cfg_global->logs)){
-      $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Gi', $t_inicio).'.log';
+      $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Hi', $t_inicio).'.log';
       if(file_exists($GLOBALS['log'])){
         $i_log = 0;
         do {
           $i_log++;
-          $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
+          $GLOBALS['log'] = $cfg_global->logs.date('Ymd_Hi', $t_inicio).'_'.$i_log.'.log';
         } while(file_exists($GLOBALS['log']));
       }
       file_put_contents($GLOBALS['log'], $GLOBALS['prelog']);
@@ -286,17 +286,17 @@
     exit(0);
   }
 
-  ln('marca de tiempo inicial '.date('Ymd_Gi', $t_inicio));
+  ln('marca de tiempo inicial '.date('Ymd_Hi', $t_inicio));
 
   // iniciamos el log y guardamos el prelog
   
   if(!file_exists($cfg->copia_local.'/logs')) mkdir($cfg->copia_local.'/logs');
-  $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Gi', $t_inicio).'.log';
+  $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Hi', $t_inicio).'.log';
   if(file_exists($GLOBALS['log'])){
     $i_log = 0;
     do {
       $i_log++;
-      $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Gi', $t_inicio).'_'.$i_log.'.log';
+      $GLOBALS['log'] = $cfg->copia_local.'/logs/'.date('Ymd_Hi', $t_inicio).'_'.$i_log.'.log';
     } while(file_exists($GLOBALS['log']));
   }
   file_put_contents($GLOBALS['log'], $GLOBALS['prelog']);
@@ -379,9 +379,25 @@
   }
   
   $t_fin = time();
-  $duracion = $t_fin - $t_inicio;
-  ln('marca de tiempo final '.date('Ymd_Gi', $t_fin));
-  ln('duración del proceso '.$duracion.'s');
+  
+  $segundos = $t_fin - $t_inicio;
+  $minutos = 0;
+  $horas = 0;
+
+  if($segundos > 60){
+    $minutos = floor($segundos / 60);
+    $segundos = $segundos % 60;
+  }
+
+  if($minutos > 60){
+    $horas = floor($minutos / 60);
+    $minutos = $minutos % 60;
+  }
+
+  $duracion = trim((($horas > 0) ? $horas.'h ' : '').(($minutos > 0) ? $minutos.'m ' : '').(($segundos > 0) ? $segundos.'s ' : ''));
+
+  ln('marca de tiempo final '.date('Ymd_Hi', $t_fin));
+  ln('duración del proceso '.(($duracion != '') ? $duracion : '0s'));
   ln();
 
   exit(0);
